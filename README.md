@@ -22,7 +22,7 @@ composer create-project --prefer-dist cakephp/app
 In case you want to use a custom app dir name (e.g. `/myapp/`):
 
 ```bash
-composer create-project --prefer-dist cakephp/app myapp
+composer create-project --prefer-dist cakephp/app TraditionalFoodMyanmar
 ```
 
 You can now either use your machine's webserver to view the default home page, or start
