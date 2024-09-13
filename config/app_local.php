@@ -42,12 +42,12 @@ return [
              * MySQL on MAMP uses port 8889, MAMP users will want to uncomment
              * the following line and set the port accordingly
              */
-            //'port' => 'non_standard_port_number',
+            'port' => '8889',
 
-            'username' => 'my_app',
-            'password' => 'secret',
+            'username' => 'root',
+            'password' => 'root',
 
-            'database' => 'my_app',
+            'database' => 'TraditionalFoodMyanmar',
             /*
              * If not using the default 'public' schema with the PostgreSQL driver
              * set it here.
@@ -65,10 +65,10 @@ return [
          */
         'test' => [
             'host' => 'localhost',
-            //'port' => 'non_standard_port_number',
-            'username' => 'my_app',
-            'password' => 'secret',
-            'database' => 'test_myapp',
+            'port' => '8889',
+            'username' => 'root',
+            'password' => 'root',
+            'database' => 'TraditionalFoodMyanmar',
             //'schema' => 'myapp',
             'url' => env('DATABASE_TEST_URL', 'sqlite://127.0.0.1/tmp/tests.sqlite'),
         ],
