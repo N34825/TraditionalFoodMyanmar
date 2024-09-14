@@ -45,12 +45,12 @@ return [
              * MySQL on MAMP uses port 8889, MAMP users will want to uncomment
              * the following line and set the port accordingly
              */
-            // 'port' => '8889',
+            // 'port' => '3308',
 
             'username' => 'root',
             'password' => 'root',
 
-            'database' => 'TraditionalFoodMyanmar',
+            'database' => '',
             /*
              * If not using the default 'public' schema with the PostgreSQL driver
              * set it here.
@@ -69,7 +69,7 @@ return [
          */
         'test' => [
             'host' => 'localhost',
-            'port' => '8889',
+            'port' => '3308',
             'username' => 'root',
             'password' => 'root',
             'database' => 'TraditionalFoodMyanmar',
