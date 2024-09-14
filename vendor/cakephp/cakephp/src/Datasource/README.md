@@ -1,82 +1,358 @@
-[![Total Downloads](https://img.shields.io/packagist/dt/cakephp/datasource.svg?style=flat-square)](https://packagist.org/packages/cakephp/datasource)
+[![Total Downloads](https://img.shields.io/packagist/dt/cakephp/database.svg?style=flat-square)](https://packagist.org/packages/cakephp/database)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE.txt)
 
-# CakePHP Datasource Library
+# A flexible and lightweight Database Library for PHP
 
-This library contains interfaces for implementing Repositories and Entities using any data source,
-a class for managing connections to datasources and traits to help you quickly implement the
-interfaces provided by this package.
+This library abstracts and provides help with most aspects of dealing with relational
+databases such as keeping connections to the server, building queries,
+preventing SQL injections, inspecting and altering schemas, and with debugging and
+profiling queries sent to the database.
 
-## Repositories
+It adopts the API from the native PDO extension in PHP for familiarity, but solves many of the
+inconsistencies PDO has, while also providing several features that extend PDO's capabilities.
 
-A repository is a class capable of interfacing with a data source using operations such as
-`find`, `save` and  `delete` by using intermediate query objects for expressing commands to
-the data store and returning Entities as the single result unit of such system.
+A distinguishing factor of this library when compared to similar database connection packages,
+is that it takes the concept of "data types" to its core. It lets you work with complex PHP objects
+or structures that can be passed as query conditions or to be inserted in the database.
 
-In the case of a Relational database, a Repository would be a `Table`, which can be return single
-or multiple `Entity` objects by using a `Query`.
-
-This library exposes the following interfaces for creating a system that implements the
-repository pattern and is compatible with the CakePHP framework:
-
-* `RepositoryInterface` - Describes the methods for a base repository class.
-* `EntityInterface` - Describes the methods for a single result object.
-* `ResultSetInterface` - Represents the idea of a collection of Entities as a result of a query.
-
-Additionally, this package provides a few traits and classes you can use in your own implementations:
-
-* `EntityTrait` - Contains the default implementation for the `EntityInterface`.
-* `QueryTrait` - Exposes the methods for creating a query object capable of returning decoratable collections.
-* `ResultSetDecorator` - Decorates any traversable object, so it complies with `ResultSetInterface`.
+The typing system will intelligently convert the PHP structures when passing them to the database, and
+convert them back when retrieving.
 
 
-## Connections
+## Connecting to the database
 
-This library contains a couple of utility classes meant to create and manage
-connection objects. Connections are typically used in repositories for
-interfacing with the actual data source system.
+This library is able to work with the following databases:
 
-The `ConnectionManager` class acts as a registry to access database connections
-your application has. It provides a place that other objects can get references
-to existing connections. Creating connections with the `ConnectionManager` is
-easy:
+* MySQL
+* Postgres
+* SQLite
+* Microsoft SQL Server (2008 and above)
+
+The first thing you need to do when using this library is create a connection object.
+Before performing any operations with the connection, you need to specify a driver
+to use:
 
 ```php
-use Cake\Datasource\ConnectionManager;
+use Cake\Database\Connection;
+use Cake\Database\Driver\Mysql;
+use Cake\Database\Driver\Sqlite;
 
-ConnectionManager::config('connection-one', [
-    'className' => 'MyApp\Connections\CustomConnection',
-    'param1' => 'value',
-    'param2' => 'another value'
+$connection = new Connection([
+	'driver' => Mysql::class,
+	'database' => 'test',
+	'username' => 'root',
+	'password' => 'secret',
 ]);
 
-ConnectionManager::config('connection-two', [
-    'className' => 'MyApp\Connections\CustomConnection',
-    'param1' => 'different value',
-    'param2' => 'another value'
+$connection2 = new Connection([
+	'driver' => Sqlite::class,
+	'database' => '/path/to/file.db'
 ]);
 ```
 
-When requested, the `ConnectionManager` will instantiate
-`MyApp\Connections\CustomConnection` by passing `param1` and `param2` inside an
-array as the first argument of the constructor.
+Drivers are classes responsible for actually executing the commands to the database and
+correctly building the SQL according to the database specific dialect.
 
-Once configured connections can be fetched using `ConnectionManager::get()`.
-This method will construct and load a connection if it has not been built
-before, or return the existing known connection:
+### Connection options
+
+This is a list of possible options that can be passed when creating a connection:
+
+* `driver`: Driver class name
+* `persistent`: Creates a persistent connection
+* `host`: The server host
+* `database`: The database name
+* `username`: Login credential
+* `password`: Connection secret
+* `encoding`: The connection encoding (or charset)
+* `timezone`: The connection timezone or time offset
+
+## Using connections
+
+After creating a connection, you can immediately interact with the database. You can choose
+either to use the shorthand methods `execute()`, `insert()`, `update()`, `delete()` or use the
+`newQuery()` for using a query builder.
+
+The easiest way of executing queries is by using the `execute()` method, it will return a
+`Cake\Database\StatementInterface` that you can use to get the data back:
 
 ```php
-use Cake\Datasource\ConnectionManager;
-$conn = ConnectionManager::get('master');
-```
+$statement = $connection->execute('SELECT * FROM articles');
 
-It is also possible to store connection objects by passing the instance directly to the manager:
+while($row = $statement->fetch('assoc')) {
+	echo $row['title'] . PHP_EOL;
+}
+```
+Binding values to parametrized arguments is also possible with the execute function:
 
 ```php
-use Cake\Datasource\ConnectionManager;
-$conn = ConnectionManager::config('other', $connectionInstance);
+$statement = $connection->execute('SELECT * FROM articles WHERE id = :id', ['id' => 1], ['id' => 'integer']);
+$results = $statement->fetch('assoc');
 ```
 
-## Documentation
+The third parameter is the types the passed values should be converted to when passed to the database. If
+no types are passed, all arguments will be interpreted as a string.
 
-Please make sure you check the [official API documentation](https://api.cakephp.org/4.x/namespace-Cake.Datasource.html)
+Alternatively you can construct a statement manually and then fetch rows from it:
+
+```php
+$statement = $connection->prepare('SELECT * from articles WHERE id != :id');
+$statement->bind(['id' => 1], ['id' => 'integer']);
+$results = $statement->fetchAll('assoc');
+```
+
+The default types that are understood by this library and can be passed to the `bind()` function or to `execute()`
+are:
+
+* biginteger
+* binary
+* date
+* float
+* decimal
+* integer
+* time
+* datetime
+* timestamp
+* uuid
+
+More types can be added dynamically in a bit.
+
+Statements can be reused by binding new values to the parameters in the query:
+
+```php
+$statement = $connection->prepare('SELECT * from articles WHERE id = :id');
+$statement->bind(['id' => 1], ['id' => 'integer']);
+$results = $statement->fetchAll('assoc');
+
+$statement->bind(['id' => 1], ['id' => 'integer']);
+$results = $statement->fetchAll('assoc');
+```
+
+### Updating Rows
+
+Updating can be done using the `update()` function in the connection object. In the following
+example we will update the title of the article with id = 1:
+
+```php
+$connection->update('articles', ['title' => 'New title'], ['id' => 1]);
+```
+
+The concept of data types is central to this library, so you can use the last parameter of the function
+to specify what types should be used:
+
+```php
+$connection->update(
+	'articles',
+	['title' => 'New title'],
+	['created >=' => new DateTime('-3 day'), 'created <' => new DateTime('now')],
+	['created' => 'datetime']
+);
+```
+
+The example above will execute the following SQL:
+
+```sql
+UPDATE articles SET title = 'New Title' WHERE created >= '2014-10-10 00:00:00' AND created < '2014-10-13 00:00:00';
+```
+
+More on creating complex where conditions or more complex update queries later.
+
+### Deleting Rows
+
+Similarly, the `delete()` method is used to delete rows from the database:
+
+```php
+$connection->delete('articles', ['created <' => DateTime('now')], ['created' => 'date']);
+```
+
+Will generate the following SQL
+
+```sql
+DELETE FROM articles where created < '2014-10-10'
+```
+
+### Inserting Rows
+
+Rows can be inserted using the `insert()` method:
+
+```php
+$connection->insert(
+	'articles',
+	['title' => 'My Title', 'body' => 'Some paragraph', 'created' => new DateTime()],
+	['created' => 'datetime']
+);
+```
+
+More complex updates, deletes and insert queries can be generated using the `Query` class.
+
+## Query Builder
+
+One of the goals of this library is to allow the generation of both simple and complex queries with
+ease. The query builder can be accessed by getting a new instance of a query:
+
+```php
+$query = $connection->newQuery();
+```
+
+### Selecting Fields
+
+Adding fields to the `SELECT` clause:
+
+```php
+$query->select(['id', 'title', 'body']);
+
+// Results in SELECT id AS pk, title AS aliased_title, body ...
+$query->select(['pk' => 'id', 'aliased_title' => 'title', 'body']);
+
+// Use a closure
+$query->select(function ($query) {
+	return ['id', 'title', 'body'];
+});
+```
+
+### Where Conditions
+
+Generating conditions:
+
+```php
+// WHERE id = 1
+$query->where(['id' => 1]);
+
+// WHERE id > 2
+$query->where(['id >' => 1]);
+```
+
+As you can see you can use any operator by placing it with a space after the field name.
+Adding multiple conditions is easy as well:
+
+```php
+$query->where(['id >' => 1])->andWhere(['title' => 'My Title']);
+
+// Equivalent to
+$query->where(['id >' => 1, 'title' => 'My title']);
+```
+
+It is possible to generate `OR` conditions as well
+
+```php
+$query->where(['OR' => ['id >' => 1, 'title' => 'My title']]);
+```
+
+For even more complex conditions you can use closures and expression objects:
+
+```php
+$query->where(function ($exp) {
+        return $exp
+            ->eq('author_id', 2)
+            ->eq('published', true)
+            ->notEq('spam', true)
+            ->gt('view_count', 10);
+    });
+```
+
+Which results in:
+
+```sql
+SELECT * FROM articles
+WHERE
+	author_id = 2
+	AND published = 1
+	AND spam != 1
+	AND view_count > 10
+```
+
+Combining expressions is also possible:
+
+```php
+$query->where(function ($exp) {
+        $orConditions = $exp->or(['author_id' => 2])
+            ->eq('author_id', 5);
+        return $exp
+            ->not($orConditions)
+            ->lte('view_count', 10);
+    });
+```
+
+That generates:
+
+```sql
+SELECT *
+FROM articles
+WHERE
+	NOT (author_id = 2 OR author_id = 5)
+	AND view_count <= 10
+```
+
+When using the expression objects you can use the following methods to create conditions:
+
+* `eq()` Creates an equality condition.
+* `notEq()` Create an inequality condition
+* `like()` Create a condition using the LIKE operator.
+* `notLike()` Create a negated LIKE condition.
+* `in()` Create a condition using IN.
+* `notIn()` Create a negated condition using IN.
+* `gt()` Create a > condition.
+* `gte()` Create a >= condition.
+* `lt()` Create a < condition.
+* `lte()` Create a <= condition.
+* `isNull()` Create an IS NULL condition.
+* `isNotNull()` Create a negated IS NULL condition.
+
+### Aggregates and SQL Functions
+
+```php
+// Results in SELECT COUNT(*) count FROM ...
+$query->select(['count' => $query->func()->count('*')]);
+```
+
+A number of commonly used functions can be created with the func() method:
+
+* `sum()` Calculate a sum. The arguments will be treated as literal values.
+* `avg()` Calculate an average. The arguments will be treated as literal values.
+* `min()` Calculate the min of a column. The arguments will be treated as literal values.
+* `max()` Calculate the max of a column. The arguments will be treated as literal values.
+* `count()` Calculate the count. The arguments will be treated as literal values.
+* `concat()` Concatenate two values together. The arguments are treated as bound parameters unless marked as literal.
+* `coalesce()` Coalesce values. The arguments are treated as bound parameters unless marked as literal.
+* `dateDiff()` Get the difference between two dates/times. The arguments are treated as bound parameters unless marked as literal.
+* `now()` Take either 'time' or 'date' as an argument allowing you to get either the current time, or current date.
+
+When providing arguments for SQL functions, there are two kinds of parameters you can use, literal arguments and bound parameters. Literal
+parameters allow you to reference columns or other SQL literals. Bound parameters can be used to safely add user data to SQL functions.
+For example:
+
+```php
+$concat = $query->func()->concat([
+    'title' => 'literal',
+    ' NEW'
+]);
+$query->select(['title' => $concat]);
+```
+
+The above generates:
+
+```sql
+SELECT CONCAT(title, :c0) ...;
+```
+
+### Other SQL Clauses
+
+Read of all other SQL clauses that the builder is capable of generating in the [official API docs](https://api.cakephp.org/4.x/class-Cake.Database.Query.html)
+
+### Getting Results out of a Query
+
+Once you’ve made your query, you’ll want to retrieve rows from it. There are a few ways of doing this:
+
+```php
+// Iterate the query
+foreach ($query as $row) {
+    // Do stuff.
+}
+
+// Get the statement and fetch all results
+$results = $query->execute()->fetchAll('assoc');
+```
+
+## Official API
+
+You can read the official [official API docs](https://api.cakephp.org/4.x/namespace-Cake.Database.html) to learn more of what this library
+has to offer.
